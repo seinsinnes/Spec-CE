@@ -91,12 +91,12 @@ void load_spectrum_data(uint8_t *z80_mem) {
 }
 
 void setup_spectrum_palette(void) {
-    /* 16-bit RGB565 colors for the Spectrum */
+    /* 16-bit RGB1555 colors natively formatted for the TI-84 Plus CE */
     uint16_t spec_colors[16] = {
-        0x0000, 0x001D, 0xB000, 0xB01D, 0x05A0, 0x05BD, 0xB5A0, 0xB5BD, // Normal
-        0x0000, 0x001F, 0xF800, 0xF81F, 0x07E0, 0x07FF, 0xFFE0, 0xFFFF  // Bright
+        0x0000, 0x0018, 0x6000, 0x6018, 0x0300, 0x0318, 0x6300, 0x6318, /* Normal */
+        0x0000, 0x001F, 0x7C00, 0x7C1F, 0x03E0, 0x03FF, 0x7FE0, 0x7FFF  /* Bright */
     };
-    gfx_SetPalette(spec_colors, 16, 0);
+    gfx_SetPalette(spec_colors, 16*2, 0);
 }
 
 void render_spectrum_frame(void) {
