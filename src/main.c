@@ -276,9 +276,9 @@ int main(void) {
                 
                 /* Row 0 (FEFE): CAPS SHIFT, Z, X, C, V */
                 if (!(port_high & 0x01)) {
-                    
-                    if (kb_Data[1] & kb_2nd)   keys &= ~0x01; /* CAPS SHIFT */
-                    if (kb_Data[4] & kb_2) keys &= ~0x02; /* Z */
+                    /* If [2nd] OR [del] is pressed, assert CAPS SHIFT! */
+                    if ((kb_Data[1] & kb_2nd) || (kb_Data[1] & kb_Del)) keys &= ~0x01; 
+                    if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */
                     if (kb_Data[2] & kb_Sto) keys &= ~0x04; /* X */
                     if (kb_Data[4] & kb_Prgm)  keys &= ~0x08; /* C */
                     if (kb_Data[5] & kb_6)     keys &= ~0x10; /* V */
@@ -309,11 +309,12 @@ int main(void) {
                 }
                 /* Row 4 (EFFE): 0, 9, 8, 7, 6 */
                 if (!(port_high & 0x10)) {
-                    if (kb_Data[1] & kb_Del)    keys &= ~0x01; /* 0 (Del key) */
-                    if (kb_Data[1] & kb_Mode)   keys &= ~0x02; /* 9 (Mode key) */
-                    if (kb_Data[3] & kb_Stat)   keys &= ~0x04; /* 8 (Stat key) */
-                    if (kb_Data[5] & kb_Vars)   keys &= ~0x08; /* 7 (Vars key) */
-                    if (kb_Data[5] & kb_Chs)    keys &= ~0x10; /* 6 ((-) key) */
+                    /* If [del] is pressed, assert the '0' key! */
+                    if (kb_Data[1] & kb_Del)    keys &= ~0x01; /* 0 */
+                    if (kb_Data[1] & kb_Mode)   keys &= ~0x02; /* 9 */
+                    if (kb_Data[3] & kb_Stat)   keys &= ~0x04; /* 8 */
+                    if (kb_Data[5] & kb_Vars)   keys &= ~0x08; /* 7 */
+                    if (kb_Data[5] & kb_Chs)    keys &= ~0x10; /* 6 */
                 }
                 /* Row 5 (DFFE): P, O, I, U, Y */
                 if (!(port_high & 0x20)) {
