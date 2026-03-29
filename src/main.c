@@ -222,8 +222,23 @@ int main(void) {
     z80_mem[0x1F56] = 0x00; z80_mem[0x1F57] = 0x00; /* Disable break-key*/
     z80_mem[0x1F5C] = 0x00; z80_mem[0x1F5D] = 0x00;
 
+    /* Sweep for other IN instructions  */
+    for (uint32_t i = 0x4000; i < 65534; i++) {
+        
+        /* IN A, (C) -> RST 30h + NOP */
+        if (z80_mem[i] == 0xED && z80_mem[i+1] == 0x78) { 
+            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+        }
+
+        if (z80_mem[i] == 0xDB && z80_mem[i+1] == 0xFE) { 
+            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+        }
+        
+    }
+
     volatile uint32_t *INT_MASK = (volatile uint32_t*)0xF00028;
     int virtual_cycles = 0;
+    int frame_skip = 0;
     kb_Scan();
 
     /* Loop UNTIL the user presses the [clear] button (Group 6, kb_Clear) */
@@ -231,6 +246,7 @@ int main(void) {
         
         uint32_t int_backup = *INT_MASK;
         *INT_MASK = 0;
+        
         run_native_shim();
         *INT_MASK = int_backup;
 
@@ -253,23 +269,75 @@ int main(void) {
 
             uint8_t hardware_result = 0xFF;
 
-            /* THE ULA KEYBOARD */
+             /* THE ULA KEYBOARD */
             if ((port_low & 0x01) == 0) {
-                uint8_t keys = 0x1F; 
+                uint8_t keys = 0x1F;
+
                 
-                if (!(port_high & 0x04)) {
-                    if (kb_Data[7] & kb_Right) keys &= ~0x04; /* E */
-                    if (kb_Data[7] & kb_Left)  keys &= ~0x02; /* W */
+                /* Row 0 (FEFE): CAPS SHIFT, Z, X, C, V */
+                if (!(port_high & 0x01)) {
+                    
+                    if (kb_Data[1] & kb_2nd)   keys &= ~0x01; /* CAPS SHIFT */
+                    if (kb_Data[4] & kb_2) keys &= ~0x02; /* Z */
+                    if (kb_Data[2] & kb_Sto) keys &= ~0x04; /* X */
+                    if (kb_Data[4] & kb_Prgm)  keys &= ~0x08; /* C */
+                    if (kb_Data[5] & kb_6)     keys &= ~0x10; /* V */
                 }
+                /* Row 1 (FDFE): A, S, D, F, G */
                 if (!(port_high & 0x02)) {
-                    if (kb_Data[7] & kb_Down) keys &= ~0x02; /* S */
+                    if (kb_Data[2] & kb_Math)  keys &= ~0x01; /* A */
+                    if ((kb_Data[2] & kb_Ln) || (kb_Data[7] & kb_Down)) keys &= ~0x02; /* S (or D-Pad Down) */
+                    if (kb_Data[2] & kb_Recip) keys &= ~0x04; /* D */
+                    if (kb_Data[4] & kb_Cos)   keys &= ~0x08; /* F */
+                    if (kb_Data[5] & kb_Tan)   keys &= ~0x10; /* G */
                 }
-                if (!(port_high & 0x80)) {
-                    if (kb_Data[1] & kb_2nd) keys &= ~0x01; /* SPACE */
-                    if (kb_Data[7] & kb_Up)  keys &= ~0x08; /* N */
+                /* Row 2 (FBFE): Q, W, E, R, T */
+                if (!(port_high & 0x04)) {
+                    if (kb_Data[5] & kb_9)     keys &= ~0x01; /* Q */
+                    if ((kb_Data[6] & kb_Sub) || (kb_Data[7] & kb_Left)) keys &= ~0x02; /* W (or D-Pad Left) */
+                    if ((kb_Data[3] & kb_Sin) || (kb_Data[7] & kb_Right)) keys &= ~0x04; /* E (or D-Pad Right) */
+                    if (kb_Data[6] & kb_Mul)   keys &= ~0x08; /* R */
+                    if (kb_Data[3] & kb_4)     keys &= ~0x10; /* T */
                 }
+                /* Row 3 (F7FE): 1, 2, 3, 4, 5 */
+                if (!(port_high & 0x08)) {
+                    if (kb_Data[1] & kb_Yequ)   keys &= ~0x01; /* 1 (Y= key) */
+                    if (kb_Data[1] & kb_Window) keys &= ~0x02; /* 2 (Window key) */
+                    if (kb_Data[1] & kb_Zoom)   keys &= ~0x04; /* 3 (Zoom key) */
+                    if (kb_Data[1] & kb_Trace)  keys &= ~0x08; /* 4 (Trace key) */
+                    if (kb_Data[1] & kb_Graph)  keys &= ~0x10; /* 5 (Graph key) */
+                }
+                /* Row 4 (EFFE): 0, 9, 8, 7, 6 */
+                if (!(port_high & 0x10)) {
+                    if (kb_Data[1] & kb_Del)    keys &= ~0x01; /* 0 (Del key) */
+                    if (kb_Data[1] & kb_Mode)   keys &= ~0x02; /* 9 (Mode key) */
+                    if (kb_Data[3] & kb_Stat)   keys &= ~0x04; /* 8 (Stat key) */
+                    if (kb_Data[5] & kb_Vars)   keys &= ~0x08; /* 7 (Vars key) */
+                    if (kb_Data[5] & kb_Chs)    keys &= ~0x10; /* 6 ((-) key) */
+                }
+                /* Row 5 (DFFE): P, O, I, U, Y */
+                if (!(port_high & 0x20)) {
+                    if (kb_Data[4] & kb_8)      keys &= ~0x01; /* P */
+                    if (kb_Data[3] & kb_7)      keys &= ~0x02; /* O */
+                    if (kb_Data[2] & kb_Square) keys &= ~0x04; /* I */
+                    if (kb_Data[4] & kb_5)      keys &= ~0x08; /* U */
+                    if (kb_Data[3] & kb_1)      keys &= ~0x10; /* Y */
+                }
+                /* Row 6 (BFFE): ENTER, L, K, J, H */
                 if (!(port_high & 0x40)) {
-                    if (kb_Data[2] & kb_Alpha) keys &= ~0x01; /* ENTER */
+                    if (kb_Data[6] & kb_Enter)  keys &= ~0x01; /* ENTER */
+                    if (kb_Data[5] & kb_RParen) keys &= ~0x02; /* L */
+                    if (kb_Data[4] & kb_LParen) keys &= ~0x04; /* K */
+                    if (kb_Data[3] & kb_Comma)  keys &= ~0x08; /* J */
+                    if (kb_Data[6] & kb_Power)  keys &= ~0x10; /* H */
+                }
+                /* Row 7 (7FFE): SPACE, SYM SHIFT, M, N, B */
+                if (!(port_high & 0x80)) {
+                    if (kb_Data[3] & kb_0)      keys &= ~0x01; /* SPACE (0 key) */
+                    if (kb_Data[2] & kb_Alpha)  keys &= ~0x02; /* SYM SHIFT (Alpha key) */
+                    if (kb_Data[6] & kb_Div)    keys &= ~0x04; /* M */
+                    if ((kb_Data[2] & kb_Log) || (kb_Data[7] & kb_Up)) keys &= ~0x08; /* N (or D-Pad Up) */
+                    if (kb_Data[3] & kb_Apps)   keys &= ~0x10; /* B */
                 }
                 
                 hardware_result = keys | 0xE0;
@@ -279,8 +347,12 @@ int main(void) {
             vm_state[7]++;
 
             virtual_cycles++;
-            if (virtual_cycles > 16) { 
-                render_spectrum_frame();
+            if (virtual_cycles > 10) {
+                if (frame_skip > 5) {
+                    render_spectrum_frame();
+                    frame_skip = 0;
+                }
+                frame_skip++;
                 if (vm_state[7] >= 0x4000) fire_interrupt(z80_mem);
                 virtual_cycles = 0;
             }
