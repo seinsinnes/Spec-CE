@@ -222,18 +222,26 @@ int main(void) {
     z80_mem[0x1F56] = 0x00; z80_mem[0x1F57] = 0x00; /* Disable break-key*/
     z80_mem[0x1F5C] = 0x00; z80_mem[0x1F5D] = 0x00;
 
-    /* Sweep for other IN instructions  */
+    /* RAM Sweeper/Patcher */
     for (uint32_t i = 0x4000; i < 65534; i++) {
         
-        /* IN A, (C) -> RST 30h + NOP */
-        if (z80_mem[i] == 0xED && z80_mem[i+1] == 0x78) { 
-            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
-        }
 
         if (z80_mem[i] == 0xDB && z80_mem[i+1] == 0xFE) { 
-            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+            z80_mem[i] = 0xCF; z80_mem[i+1] = 0x00; 
         }
         
+        else if (z80_mem[i] == 0xED && z80_mem[i+1] == 0x78) { 
+            uint8_t next = z80_mem[i+2];
+            
+            if (next == 0xE6 || next == 0xF6 || next == 0x2F || 
+                next == 0xCB || next == 0xC9 || next == 0x6F) {
+                z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+            }
+        }
+        
+        else if (z80_mem[i] == 0xD3 && z80_mem[i+1] == 0x00) { 
+            z80_mem[i] = 0x00; z80_mem[i+1] = 0x00; 
+        }
     }
 
     volatile uint32_t *INT_MASK = (volatile uint32_t*)0xF00028;
@@ -251,7 +259,8 @@ int main(void) {
         *INT_MASK = int_backup;
 
         uint16_t pc = vm_state[7];
-        uint8_t trap_cause = z80_mem[pc - 1]; 
+        uint8_t trap_cause = z80_mem[pc - 1];
+
 
         /* ========================================================== */
         /* HARDWARE TRAP (RST 08h and RST 30h)                        */
@@ -279,7 +288,7 @@ int main(void) {
                     /* If [2nd] OR [del] is pressed, assert CAPS SHIFT! */
                     if ((kb_Data[1] & kb_2nd) || (kb_Data[1] & kb_Del)) keys &= ~0x01; 
                     if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */
-                    if (kb_Data[2] & kb_Sto) keys &= ~0x04; /* X */
+                    if (kb_Data[2] & kb_Sto)   keys &= ~0x04; /* X */
                     if (kb_Data[4] & kb_Prgm)  keys &= ~0x08; /* C */
                     if (kb_Data[5] & kb_6)     keys &= ~0x10; /* V */
                 }
