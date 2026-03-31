@@ -5,6 +5,7 @@
     extern _z80_mbase
     extern _c_stack_backup
     extern _z80_i
+    extern _z80_iff2
 
     section .text
     public _run_native_shim
@@ -31,7 +32,7 @@ _run_native_shim:
 
     ; Push the Target PC onto the 16-bit Game Stack.
     ld   hl, (_vm_state + 21) ; Offset 7*3 = PC
-    db   0x40, 0xE5           ; PUSH HL (.SIS) -> Safely pushes 2 bytes to SPS
+    db   0x40, 0xE5           ; PUSH HL (.SIS) -> Pushes 2 bytes to SPS
 
     ; Load all Game Registers
     ld   bc, (_vm_state + 27)
@@ -52,6 +53,7 @@ _run_native_shim:
     ld   ix, (_vm_state + 12)
     ld   iy, (_vm_state + 15)
     
+    ; Now safely overwrite 'A' with the game's true AF register.
     ld   hl, (_vm_state + 0)
     push hl
     pop  af
@@ -59,9 +61,8 @@ _run_native_shim:
     ; Load the Game's HL register last
     ld   hl, (_vm_state + 9)
 
-    ; Enter 16-bit Z80 Mode and Launch!
-    ; JP.SIS 0x0006 -> Sets ADL=0 and jumps to the C-defined stub at 0x0006!
-    db   0x40, 0xC3, 0x06, 0x00 
+    ; 4. Enter 16-bit Z80 Mode and Launch!
+    db   0x40, 0xC3, 0x06, 0x00
 
 ; -----------------------------------------------------------------------------
 _shim_exit_trap:
@@ -72,15 +73,31 @@ _shim_exit_trap:
     ld   (_vm_state + 9), hl
     ld   (_vm_state + 12), ix
     ld   (_vm_state + 15), iy
+
+    ; Save AF
     push af
     pop  hl
     ld   (_vm_state + 0), hl
 
+    ; Save AF'
     ex   af, af'
     push af
     pop  hl
     ld   (_vm_state + 24), hl
-    ex   af, af' 
+    ex   af, af'
+
+
+    ; The original AF is backed up. Now read the I register.
+    ld   a, i
+    ld   (_z80_i), a
+    
+    ; When 'ld a, i' executes, the Z80 copies the Interrupt Flip-Flop 
+    ; state (IFF2) directly into the Parity/Overflow flag.
+    push af
+    pop  hl
+    ld   a, l
+    and  0x04           ; Isolate Bit 2 (The P/V flag)
+    ld   (_z80_iff2), a ; If 0, Interrupts are Disabled.
 
     exx
     ld   (_vm_state + 27), bc

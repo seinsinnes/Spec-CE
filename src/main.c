@@ -34,6 +34,7 @@ uint24_t vm_state[12] = {0};
 
 uint8_t z80_i = 0;
 uint8_t z80_im = 1;
+uint8_t z80_iff2 = 4;
 
 /* ------------------------------------------------------------------------- */
 void load_spectrum_data(uint8_t *z80_mem) {
@@ -140,20 +141,39 @@ void render_spectrum_frame(void) {
 
 
 void fire_interrupt(uint8_t *z80_mem) {
-    /* Standard Spectrum IM 1 Interrupt runs at 0x0038 */
+    
+    /* Respect the Game's Critical Sections. */
+    if (z80_iff2 == 0) return;
+
+    /* The real Z80 hardware physically disables 
+       interrupts immediately upon acknowledging an interrupt. */
+    z80_iff2 = 0; 
+
     uint16_t current_pc = vm_state[7];
     uint16_t current_sp = vm_state[6];
 
-    /* Push the current Z80 PC to the Z80 Stack */
+    /* Push the current PC to the Z80 Stack */
     current_sp--;
     z80_mem[current_sp] = (current_pc >> 8) & 0xFF;
     current_sp--;
     z80_mem[current_sp] = current_pc & 0xFF;
 
-    /* Update the state so the Z80 jumps to the ROM's ISR */
     vm_state[6] = current_sp;
-    vm_state[7] = 0x0038;
+
+    /* Hardware Interrupt Mode Routing */
+    if (z80_i == 0x3F || z80_i == 0x00) {
+        /* IM 1: The default Sinclair ROM routine */
+        vm_state[7] = 0x0038;
+    } else {
+        /* IM 2: Custom routine. */
+        uint16_t vector_addr = (z80_i << 8) | 0xFF;
+        uint16_t target_pc = z80_mem[vector_addr] | (z80_mem[vector_addr + 1] << 8);
+        
+        vm_state[7] = target_pc;
+    }
 }
+
+
 
 
 int main(void) {
@@ -174,11 +194,11 @@ int main(void) {
     memset(vm_state, 0, sizeof(vm_state));
 
     /* ==================================================================== */
-    /* LOAD THE SNAPSHOT (ROM + RAM + CPU STATE)                         */
+    /* LOAD THE SNAPSHOT (ROM + RAM + CPU STATE)                            */
     /* ==================================================================== */
     
     /* This function opens ZXROM and ZXGAME, loads them into memory, 
-       and extracts all the exact CPU registers saved in the SNA file! */
+       and extracts all the exact CPU registers saved in the SNA file. */
     load_spectrum_data(z80_mem);
 
     /* ==================================================================== */
@@ -196,8 +216,6 @@ int main(void) {
 
     z80_mem[0x0030] = 0x5B; z80_mem[0x0031] = 0xC3; /* RST 30h (Catches IN A, C) */
     z80_mem[0x0032] = trap_address & 0xFF; z80_mem[0x0033] = (trap_address >> 8) & 0xFF; z80_mem[0x0034] = (trap_address >> 16) & 0xFF;
-    
-    z80_mem[0x0006] = 0xC9; // Z80 Entrance Stub
 
 
     /* Patch the ROM */
@@ -222,18 +240,33 @@ int main(void) {
     z80_mem[0x1F56] = 0x00; z80_mem[0x1F57] = 0x00; /* Disable break-key*/
     z80_mem[0x1F5C] = 0x00; z80_mem[0x1F5D] = 0x00;
 
-    /* Sweep for other IN instructions  */
+  
+
+    /* RAM Sweeper/Patcher */
     for (uint32_t i = 0x4000; i < 65534; i++) {
         
-        /* IN A, (C) -> RST 30h + NOP */
-        if (z80_mem[i] == 0xED && z80_mem[i+1] == 0x78) { 
-            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
-        }
-
-        if (z80_mem[i] == 0xDB && z80_mem[i+1] == 0xFE) { 
-            z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+        /* Trap DB, but Leave the port number intact. */
+        if (z80_mem[i] == 0xDB) {
+            uint8_t port = z80_mem[i+1];
+            if (port == 0xFE || port == 0x1F) {
+                z80_mem[i] = 0xCF; /* Replaces DB with RST 08h */
+            }
         }
         
+        /* Trap ED 78. */
+        else if (z80_mem[i] == 0xED && z80_mem[i+1] == 0x78) { 
+            uint8_t next = z80_mem[i+2];
+            if (next == 0xE6 || next == 0xF6 || next == 0x2F || 
+                next == 0xCB || next == 0xC9 || next == 0x6F) {
+                z80_mem[i] = 0xF7; z80_mem[i+1] = 0x00; 
+
+            }
+        }
+        
+        else if (z80_mem[i] == 0xD3 && z80_mem[i+1] == 0x00) { 
+            z80_mem[i] = 0x00; z80_mem[i+1] = 0x00;
+            
+        }
     }
 
     volatile uint32_t *INT_MASK = (volatile uint32_t*)0xF00028;
@@ -247,11 +280,18 @@ int main(void) {
         uint32_t int_backup = *INT_MASK;
         *INT_MASK = 0;
         
+        if (z80_iff2) {
+            z80_mem[0x0006] = 0xFB; /* EI (Enable Interrupts) */
+        } else {
+            z80_mem[0x0006] = 0x00; /* NOP (Do Nothing) */
+        }
+        z80_mem[0x0007] = 0xC9;     /* RET (Jump to Game PC) */
+        
         run_native_shim();
         *INT_MASK = int_backup;
 
         uint16_t pc = vm_state[7];
-        uint8_t trap_cause = z80_mem[pc - 1]; 
+        uint8_t trap_cause = z80_mem[pc - 1];
 
         /* ========================================================== */
         /* HARDWARE TRAP (RST 08h and RST 30h)                        */
@@ -261,7 +301,9 @@ int main(void) {
             uint8_t port_low, port_high;
             if (trap_cause == 0xCF) {
                 port_high = (vm_state[0] >> 8) & 0xFF;
-                port_low  = 0xFE;
+                
+                /* Read the port */
+                port_low  = z80_mem[vm_state[7]]; 
             } else {
                 port_high = (vm_state[1] >> 8) & 0xFF;
                 port_low  = vm_state[1] & 0xFF;
@@ -269,17 +311,18 @@ int main(void) {
 
             uint8_t hardware_result = 0xFF;
 
-             /* THE ULA KEYBOARD */
+            /* THE ULA KEYBOARD */
             if ((port_low & 0x01) == 0) {
                 uint8_t keys = 0x1F;
 
                 
                 /* Row 0 (FEFE): CAPS SHIFT, Z, X, C, V */
                 if (!(port_high & 0x01)) {
-                    /* If [2nd] OR [del] is pressed, assert CAPS SHIFT! */
+                    /* If [2nd] OR [del] is pressed, assert CAPS SHIFT. */
                     if ((kb_Data[1] & kb_2nd) || (kb_Data[1] & kb_Del)) keys &= ~0x01; 
-                    if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */
-                    if (kb_Data[2] & kb_Sto) keys &= ~0x04; /* X */
+                    if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */  
+                    if (kb_Data[2] & kb_Sto)   keys &= ~0x04; /* X */
+
                     if (kb_Data[4] & kb_Prgm)  keys &= ~0x08; /* C */
                     if (kb_Data[5] & kb_6)     keys &= ~0x10; /* V */
                 }
@@ -342,6 +385,10 @@ int main(void) {
                 }
                 
                 hardware_result = keys | 0xE0;
+            }
+            /* KEMPSTON JOYSTICK? */
+            else if (port_low == 0x1F) {
+                hardware_result = 0x00; /* 0x00 means no joystick buttons pressed. */
             }
 
             vm_state[0] = (hardware_result << 8) | (vm_state[0] & 0xFF);
