@@ -25,7 +25,7 @@ convbin -i 48.rom -o ZXGAME.8xv -k 8xv -n ZXROM -j bin
 convbin -i AllHallows.sna -o ZXGAME.8xv -k 8xv -n ZXGAME -j bin
 ```
 
-[Spectrum 48k rom]([https://pages.github.com/](https://spectrumcomputing.co.uk/zxdb/sinclair/entries/1000486/48.rom.zip)
+[Spectrum 48k rom](https://spectrumcomputing.co.uk/zxdb/sinclair/entries/1000486/48.rom.zip)
 
 # Usage once running on the calculator (or calculator emulator)
 SpecCE runs by dropping the eZ80 processor into 16-bit compatibility mode. However, the TI-84 Plus CE has a vastly different keyboard layout than a ZX Spectrum.
