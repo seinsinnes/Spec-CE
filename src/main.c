@@ -264,8 +264,7 @@ int main(void) {
         }
         
         else if (z80_mem[i] == 0xD3 && z80_mem[i+1] == 0x00) { 
-            z80_mem[i] = 0x00; z80_mem[i+1] = 0x00;
-            
+            z80_mem[i] = 0x00; z80_mem[i+1] = 0x00; 
         }
     }
 
@@ -320,9 +319,8 @@ int main(void) {
                 if (!(port_high & 0x01)) {
                     /* If [2nd] OR [del] is pressed, assert CAPS SHIFT. */
                     if ((kb_Data[1] & kb_2nd) || (kb_Data[1] & kb_Del)) keys &= ~0x01; 
-                    if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */  
+                    if (kb_Data[4] & kb_2)     keys &= ~0x02; /* Z */
                     if (kb_Data[2] & kb_Sto)   keys &= ~0x04; /* X */
-
                     if (kb_Data[4] & kb_Prgm)  keys &= ~0x08; /* C */
                     if (kb_Data[5] & kb_6)     keys &= ~0x10; /* V */
                 }
