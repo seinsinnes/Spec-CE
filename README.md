@@ -1,7 +1,7 @@
 # Spec-CE
 SpecCE is an assembly shim that allows the TI-84 Plus CE graphing calculator to natively execute ZX Spectrum 48K software.
 
-#Building
+# Building
 
 To build Spec-CE you need the [CE C/C++ Toolchain](https://github.com/CE-Programming/toolchain)
 Then it is just a matter of running make.
@@ -14,7 +14,7 @@ keypadc
 
 [CE Libraries](https://github.com/CE-Programming/libraries)
 
-#Loading Games
+# Loading Games
 
 Spec-CE currently supports spectrum 48K .SNA snapshots. The 48K .SNA snapshots need to be converted into TI-84 Plus CE AppVars (.8xv files) so they can be read natively from the calculator's memory. Use the CE toolchain (e.g., ConvBin) to package the snapshots before transferring them via TI Connect CE or CEmu. The ZX spectrum rom also needs to be converted to an AppVar.
 
@@ -27,7 +27,9 @@ convbin -i AllHallows.sna -o ZXGAME.8xv -k 8xv -n ZXGAME -j bin
 
 [Spectrum 48k rom](https://spectrumcomputing.co.uk/zxdb/sinclair/entries/1000486/48.rom.zip)
 
-# Usage once running on the calculator (or calculator emulator)
+# Usage
+(once running on the calculator or calculator emulator)
+
 SpecCE runs by dropping the eZ80 processor into 16-bit compatibility mode. However, the TI-84 Plus CE has a vastly different keyboard layout than a ZX Spectrum.
 
 ## Keyboard Mapping
